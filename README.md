@@ -12,10 +12,10 @@ used in this project.
 
 ## Current Phase
 
-Phase 5 is complete. The project now includes value-owning packet and UE queue models,
-traffic generation, channel models, JSON configuration, and Round-Robin scheduling
-decisions. The CLI validates a configuration and prints a short summary; it does not run
-the models or scheduler.
+Phase 6 is complete. The project now includes value-owning packet and UE queue models,
+traffic generation, channel models, JSON configuration, and both Round-Robin and
+simplified Proportional-Fair scheduling decisions. The CLI validates a configuration and
+prints a short summary; it does not run the models or schedulers.
 
 Applying scheduler decisions, packet transmission through a simulation engine, metrics,
 result files, Java integration tests, and CI are not implemented yet.
@@ -105,6 +105,36 @@ The implementation calculates the ceiling with integer division and a remainder 
 This linear capacity rule is deterministic and easy to discuss, but it is not a 3GPP
 transport-block or physical-layer capacity calculation.
 
+## Proportional-Fair Scheduling
+
+`ProportionalFairScheduler` uses current channel opportunity and historical service to
+choose a UE for each resource block. Its simplified metric is:
+
+```text
+PF metric = bytesPerResourceBlock(CQI)
+            / max(historical average throughput, epsilon)
+```
+
+CQI appears in the numerator, so a UE with a better current channel receives a higher
+estimated rate. Historical average throughput appears in the denominator, so a UE that
+has received less service can be preferred over a previously well-served UE. Epsilon is
+positive and prevents division by zero when a UE has no throughput history.
+
+Only UEs with useful queued demand are eligible. When scores are equal, the scheduler
+prefers the UE with fewer resource blocks in the current call, then the lower UE ID. The
+result is deterministic and prevents one equal-scoring UE from taking every resource
+block.
+
+The scheduler only reads historical throughput. A future `SimulationEngine` will update
+it after transmission using an exponential moving average such as:
+
+```text
+T(t) = (1 - alpha) * T(t-1) + alpha * transmittedBytes(t)
+```
+
+That update and end-to-end simulation are not implemented yet. This PF model is an
+educational approximation, not an exact production or 3GPP scheduler.
+
 ## Planned Architecture
 
 - `Packet`
@@ -140,7 +170,7 @@ flowchart LR
 2. Complete: core packet and UE queue models with JSON configuration.
 3. Complete: traffic generation and changing channel models.
 4. Complete: Round-Robin scheduler.
-5. Planned: simplified Proportional-Fair scheduler.
+5. Complete: simplified Proportional-Fair scheduler.
 6. Planned: metrics collection and result export.
 7. Planned: Java/JUnit black-box integration tests.
 8. Planned: GitHub Actions CI, formatting checks, and sanitizer builds.

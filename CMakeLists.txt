@@ -29,6 +29,8 @@ add_library(
   src/cqi_capacity.cpp
   src/packet.cpp
   src/project_info.cpp
+  src/proportional_fair_metric.cpp
+  src/proportional_fair_scheduler.cpp
   src/round_robin_scheduler.cpp
   src/traffic_generator.cpp
   src/user_equipment.cpp)
@@ -67,6 +69,8 @@ if(BUILD_TESTING)
     tests/cqi_capacity_test.cpp
     tests/packet_test.cpp
     tests/project_info_test.cpp
+    tests/proportional_fair_metric_test.cpp
+    tests/proportional_fair_scheduler_test.cpp
     tests/round_robin_scheduler_test.cpp
     tests/traffic_generator_test.cpp
     tests/user_equipment_test.cpp)
