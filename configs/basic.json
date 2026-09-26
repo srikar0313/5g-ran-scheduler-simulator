@@ -1,0 +1,55 @@
+{
+  "simulation": {
+    "time_slots": 100,
+    "slot_duration_ms": 1.0,
+    "resource_blocks_per_slot": 10,
+    "random_seed": 42
+  },
+  "ues": [
+    {
+      "id": 1,
+      "priority": 3,
+      "initial_cqi": 12,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 160,
+        "latency_budget_slots": 5,
+        "period_slots": 1,
+        "category": "voice"
+      },
+      "channel": {
+        "model": "static"
+      }
+    },
+    {
+      "id": 2,
+      "priority": 2,
+      "initial_cqi": 9,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 1200,
+        "latency_budget_slots": 20,
+        "period_slots": 5,
+        "category": "video"
+      },
+      "channel": {
+        "model": "static"
+      }
+    },
+    {
+      "id": 3,
+      "priority": 1,
+      "initial_cqi": 6,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 1500,
+        "latency_budget_slots": 50,
+        "period_slots": 10,
+        "category": "download"
+      },
+      "channel": {
+        "model": "static"
+      }
+    }
+  ]
+}

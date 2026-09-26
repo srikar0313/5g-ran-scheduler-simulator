@@ -12,9 +12,12 @@ used in this project.
 
 ## Current Phase
 
-Phase 2 establishes the repository structure, CMake build, a minimal C++ library and
-CLI, and a GoogleTest smoke test. Scheduling, traffic generation, metrics, Java
-integration tests, JSON output, CSV output, and CI are planned but not implemented yet.
+Phase 3 is complete. The project now includes value-owning packet and UE queue models,
+plus JSON configuration loading and validation. The CLI can validate a configuration
+and print a short summary.
+
+Scheduling, traffic generation, changing channel conditions, simulation execution,
+metrics, result files, Java integration tests, and CI are not implemented yet.
 
 ## Build And Test
 
@@ -22,7 +25,8 @@ integration tests, JSON output, CSV output, and CI are planned but not implement
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
-./build/ran_scheduler
+./build/ran_scheduler --help
+./build/ran_scheduler --config configs/basic.json
 ```
 
 Optional sanitizer build on compatible GCC/Clang environments:
@@ -32,6 +36,25 @@ cmake -S . -B build-sanitized -DRAN_ENABLE_SANITIZERS=ON
 cmake --build build-sanitized
 ctest --test-dir build-sanitized --output-on-failure
 ```
+
+## Current Models
+
+`Packet` tracks a packet's original and remaining bytes, arrival slot, latency budget,
+and simplified traffic category. `UserEquipment` owns a FIFO packet queue and basic
+transmitted and dropped counters.
+
+A packet uses this exact expiry rule:
+
+```text
+current_slot >= arrival_slot + latency_budget_slots
+```
+
+For example, a packet arriving in slot 0 with a latency budget of 3 can be served in
+slots 0, 1, and 2, and expires before scheduling in slot 3.
+
+The `voice`, `video`, and `download` categories and the values in `configs/basic.json`
+are simplified educational labels and settings. They are not standardized 5G traffic
+profiles or QoS flows.
 
 ## Planned Architecture
 
@@ -64,14 +87,14 @@ flowchart LR
 
 ## Roadmap
 
-1. Repository structure and CMake build.
-2. Core packet and UE queue models.
-3. Traffic and channel models.
-4. Round-Robin scheduler.
-5. Simplified Proportional-Fair scheduler.
-6. Metrics collection and result export.
-7. Java/JUnit black-box integration tests.
-8. GitHub Actions CI, formatting checks, and sanitizer builds.
+1. Complete: repository structure and CMake build.
+2. Complete: core packet and UE queue models with JSON configuration.
+3. Planned: traffic generation and changing channel models.
+4. Planned: Round-Robin scheduler.
+5. Planned: simplified Proportional-Fair scheduler.
+6. Planned: metrics collection and result export.
+7. Planned: Java/JUnit black-box integration tests.
+8. Planned: GitHub Actions CI, formatting checks, and sanitizer builds.
 
 ## Development Note
 

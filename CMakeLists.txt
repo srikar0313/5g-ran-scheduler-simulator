@@ -12,9 +12,25 @@ include(CTest)
 include(FetchContent)
 include(cmake/ProjectOptions.cmake)
 
-add_library(ran_core STATIC src/project_info.cpp)
+FetchContent_Declare(
+  nlohmann_json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.11.3
+  GIT_SHALLOW TRUE)
+set(JSON_BuildTests
+    OFF
+    CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(nlohmann_json)
+
+add_library(
+  ran_core STATIC
+  src/config_loader.cpp
+  src/packet.cpp
+  src/project_info.cpp
+  src/user_equipment.cpp)
 add_library(ran::core ALIAS ran_core)
 target_include_directories(ran_core PUBLIC "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(ran_core PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(ran_core PUBLIC cxx_std_20)
 set_target_properties(ran_core PROPERTIES CXX_EXTENSIONS OFF)
 ran_apply_project_warnings(ran_core)
@@ -35,10 +51,19 @@ if(BUILD_TESTING)
   set(gtest_force_shared_crt
       ON
       CACHE BOOL "" FORCE)
+  set(BUILD_GMOCK
+      OFF
+      CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
 
-  add_executable(ran_unit_tests tests/project_info_test.cpp)
-  target_link_libraries(ran_unit_tests PRIVATE ran::core GTest::gtest_main)
+  add_executable(
+    ran_unit_tests
+    tests/config_loader_test.cpp
+    tests/packet_test.cpp
+    tests/project_info_test.cpp
+    tests/user_equipment_test.cpp)
+  target_link_libraries(ran_unit_tests PRIVATE ran::core GTest::gtest_main
+                                               nlohmann_json::nlohmann_json)
   target_compile_features(ran_unit_tests PRIVATE cxx_std_20)
   set_target_properties(ran_unit_tests PROPERTIES CXX_EXTENSIONS OFF)
   ran_apply_project_warnings(ran_unit_tests)
