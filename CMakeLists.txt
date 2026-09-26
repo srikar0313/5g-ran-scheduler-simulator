@@ -26,8 +26,10 @@ add_library(
   ran_core STATIC
   src/channel_model.cpp
   src/config_loader.cpp
+  src/cqi_capacity.cpp
   src/packet.cpp
   src/project_info.cpp
+  src/round_robin_scheduler.cpp
   src/traffic_generator.cpp
   src/user_equipment.cpp)
 add_library(ran::core ALIAS ran_core)
@@ -62,8 +64,10 @@ if(BUILD_TESTING)
     ran_unit_tests
     tests/channel_model_test.cpp
     tests/config_loader_test.cpp
+    tests/cqi_capacity_test.cpp
     tests/packet_test.cpp
     tests/project_info_test.cpp
+    tests/round_robin_scheduler_test.cpp
     tests/traffic_generator_test.cpp
     tests/user_equipment_test.cpp)
   target_link_libraries(ran_unit_tests PRIVATE ran::core GTest::gtest_main

@@ -12,12 +12,13 @@ used in this project.
 
 ## Current Phase
 
-Phase 4 is complete. The project now includes value-owning packet and UE queue models,
-traffic generation, channel models, and JSON configuration loading and validation. The
-CLI validates a configuration and prints a short summary; it does not run the models.
+Phase 5 is complete. The project now includes value-owning packet and UE queue models,
+traffic generation, channel models, JSON configuration, and Round-Robin scheduling
+decisions. The CLI validates a configuration and prints a short summary; it does not run
+the models or scheduler.
 
-Scheduling, resource allocation, simulation execution, metrics, result files, Java
-integration tests, and CI are not implemented yet.
+Applying scheduler decisions, packet transmission through a simulation engine, metrics,
+result files, Java integration tests, and CI are not implemented yet.
 
 ## Build And Test
 
@@ -81,6 +82,29 @@ profiles or QoS flows.
 All traffic and channel models are educational. They do not reproduce physical fading,
 standardized radio-channel behavior, or real network traffic distributions.
 
+## Round-Robin Scheduling
+
+`IScheduler` is a small Strategy interface. `RoundRobinScheduler` implements that
+contract by considering UEs in stable input order and allocating one resource block at a
+time. Its cursor remembers which UE should be considered first on the next call, so a
+slot with too few resource blocks does not always favor the first UE.
+
+The scheduler receives read-only `UeSchedulingView` values containing only UE ID,
+queued bytes, and CQI. It cannot modify packet queues. Instead, it returns positive
+`ResourceAllocation` decisions in input order. A future simulation engine will be
+responsible for validating and applying those decisions.
+
+UEs with empty queues are skipped. For active UEs, useful demand is estimated with:
+
+```text
+bytes per resource block = CQI * 100
+required resource blocks = ceil(queued bytes / bytes per resource block)
+```
+
+The implementation calculates the ceiling with integer division and a remainder check.
+This linear capacity rule is deterministic and easy to discuss, but it is not a 3GPP
+transport-block or physical-layer capacity calculation.
+
 ## Planned Architecture
 
 - `Packet`
@@ -115,7 +139,7 @@ flowchart LR
 1. Complete: repository structure and CMake build.
 2. Complete: core packet and UE queue models with JSON configuration.
 3. Complete: traffic generation and changing channel models.
-4. Planned: Round-Robin scheduler.
+4. Complete: Round-Robin scheduler.
 5. Planned: simplified Proportional-Fair scheduler.
 6. Planned: metrics collection and result export.
 7. Planned: Java/JUnit black-box integration tests.
