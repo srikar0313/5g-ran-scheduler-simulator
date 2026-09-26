@@ -1,0 +1,78 @@
+{
+  "simulation": {
+    "time_slots": 200,
+    "slot_duration_ms": 1.0,
+    "resource_blocks_per_slot": 3,
+    "random_seed": 2026
+  },
+  "ues": [
+    {
+      "id": 1,
+      "priority": 1,
+      "initial_cqi": 12,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 2400,
+        "latency_budget_slots": 5,
+        "period_slots": 1,
+        "category": "voice"
+      },
+      "channel": {
+        "model": "random_walk",
+        "min_cqi": 6,
+        "max_cqi": 15
+      }
+    },
+    {
+      "id": 2,
+      "priority": 1,
+      "initial_cqi": 9,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 1800,
+        "latency_budget_slots": 8,
+        "period_slots": 1,
+        "category": "video"
+      },
+      "channel": {
+        "model": "random_walk",
+        "min_cqi": 4,
+        "max_cqi": 14
+      }
+    },
+    {
+      "id": 3,
+      "priority": 1,
+      "initial_cqi": 6,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 1200,
+        "latency_budget_slots": 12,
+        "period_slots": 1,
+        "category": "video"
+      },
+      "channel": {
+        "model": "random_walk",
+        "min_cqi": 2,
+        "max_cqi": 12
+      }
+    },
+    {
+      "id": 4,
+      "priority": 1,
+      "initial_cqi": 3,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 900,
+        "latency_budget_slots": 20,
+        "period_slots": 1,
+        "category": "download"
+      },
+      "channel": {
+        "model": "random_walk",
+        "min_cqi": 1,
+        "max_cqi": 10
+      }
+    }
+  ]
+}

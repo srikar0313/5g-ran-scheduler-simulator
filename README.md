@@ -2,247 +2,40 @@
 
 [![CI](https://github.com/srikar0313/5g-ran-scheduler-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/srikar0313/5g-ran-scheduler-simulator/actions/workflows/ci.yml)
 
-This repository is an incremental portfolio project for practicing modern C++20,
-Linux-compatible builds, automated testing, and CI/CD around simplified RAN L2/MAC
-scheduling concepts.
-
-> Educational limitation: this is a simplified simulator for learning and interview
-> discussion. It is not a complete RAN implementation and is not 3GPP-compliant.
-
-No proprietary Ericsson source code, algorithms, documentation, interfaces, or data are
-used in this project.
-
-## Current Phase
-
-Phase 8 is complete. The project now runs deterministic end-to-end simulations with
-traffic generation, channel updates, Round-Robin or simplified Proportional-Fair
-scheduling, packet transmission, deadline drops, metrics, and JSON/CSV result files. A
-Java/JUnit suite tests the executable as an external process, and GitHub Actions runs
-both C++ and Java tests.
-
-## Prerequisites
-
-- CMake 3.24 or newer
-- A C++20 compiler
-- Java 21
-- Maven 3
-
-## Build
-
-```bash
-cmake -S . -B build
-cmake --build build --parallel
-```
-
-## C++ Unit Tests
-
-The GoogleTest suite exercises individual C++ components, including packet queues,
-traffic and channel models, schedulers, metrics, simulation behavior, and result writing.
-
-```bash
-ctest --test-dir build --output-on-failure
-```
-
-## Java Integration Tests
-
-The Java 21/JUnit 5 suite launches the compiled C++ executable with `ProcessBuilder`.
-It checks help output, both scheduler modes, result files and summary values,
-deterministic byte-for-byte output, and representative command-line errors.
-
-From the repository root, run:
-
-```bash
-mvn -B -f integration-tests/pom.xml test \
-  -Dran.executable="$(pwd)/build/ran_scheduler" \
-  -Dran.repository.root="$(pwd)"
-```
-
-The `ran.executable` property identifies the binary to launch. The
-`ran.repository.root` property lets the tests locate `configs/basic.json`; neither path
-is hard-coded in the test source. JUnit creates and removes temporary result directories
-for every test.
-
-## Run The Simulator
-
-```bash
-./build/ran_scheduler --help
-./build/ran_scheduler --config configs/basic.json \
-  --scheduler round-robin --output-dir results/round-robin
-./build/ran_scheduler --config configs/basic.json \
-  --scheduler proportional-fair --output-dir results/proportional-fair
-```
-
-`--config` is required. The scheduler defaults to `round-robin`, and the output
-directory defaults to `results`.
-
-## Continuous Integration
-
-The [CI workflow](.github/workflows/ci.yml) runs on pushes to `main` and pull requests
-targeting `main`. Its Ubuntu job configures and builds the C++ project, runs all C++ unit
-tests, sets up Java 21 with Maven caching, and runs the Java integration tests. CTest
-logs are uploaded when the job fails.
-
-Optional sanitizer build on compatible GCC/Clang environments:
-
-```bash
-cmake -S . -B build-sanitized -DRAN_ENABLE_SANITIZERS=ON
-cmake --build build-sanitized
-ctest --test-dir build-sanitized --output-on-failure
-```
-
-## Current Models
-
-`Packet` tracks a packet's original and remaining bytes, arrival slot, latency budget,
-and simplified traffic category. `UserEquipment` owns a FIFO packet queue and basic
-transmitted and dropped counters.
-
-`TrafficGenerator` supports three simple models:
-
-- `periodic` creates one packet when `slot % period_slots == 0`.
-- `bernoulli` makes one seeded arrival decision per slot using a configured probability.
-- `none` never creates packets or consumes random values.
-
-For simplicity, `none` configurations still require the common packet size, latency
-budget, and category fields, although the model does not use them.
-
-`ChannelModel` supports three CQI models:
-
-- `static` always returns the initial CQI.
-- `trace` returns configured CQI values and holds the final value after the trace ends.
-- `random_walk` changes CQI by -1, 0, or +1 and clamps it to configured limits.
-
-Bernoulli traffic and random-walk CQI use `std::mt19937`. A fixed seed produces the same
-sequence, which keeps tests and examples reproducible. The Bernoulli threshold and the
-random-walk modulo operation are deliberately simple simulation abstractions.
-
-A packet uses this exact expiry rule:
-
-```text
-current_slot >= arrival_slot + latency_budget_slots
-```
-
-For example, a packet arriving in slot 0 with a latency budget of 3 can be served in
-slots 0, 1, and 2, and expires before scheduling in slot 3.
-
-Completed-packet latency includes both its arrival and completion slots:
-
-```text
-latency in slots = completion slot - arrival slot + 1
-```
-
-A packet that arrives and completes in the same slot therefore has a latency of one.
-
-The `voice`, `video`, and `download` categories and the values in `configs/basic.json`
-are simplified educational labels and settings. They are not standardized 5G traffic
-profiles or QoS flows.
-
-All traffic and channel models are educational. They do not reproduce physical fading,
-standardized radio-channel behavior, or real network traffic distributions.
-
-## Round-Robin Scheduling
-
-`IScheduler` is a small Strategy interface. `RoundRobinScheduler` implements that
-contract by considering UEs in stable input order and allocating one resource block at a
-time. Its cursor remembers which UE should be considered first on the next call, so a
-slot with too few resource blocks does not always favor the first UE.
-
-The scheduler receives read-only `UeSchedulingView` values containing UE ID, queued
-bytes, CQI, and historical average throughput. It cannot modify packet queues. Instead,
-it returns positive `ResourceAllocation` decisions in input order. The simulation engine
-validates and applies those decisions.
-
-UEs with empty queues are skipped. For active UEs, useful demand is estimated with:
-
-```text
-bytes per resource block = CQI * 100
-required resource blocks = ceil(queued bytes / bytes per resource block)
-```
-
-The implementation calculates the ceiling with integer division and a remainder check.
-This linear capacity rule is deterministic and easy to discuss, but it is not a 3GPP
-transport-block or physical-layer capacity calculation.
-
-## Proportional-Fair Scheduling
-
-`ProportionalFairScheduler` uses current channel opportunity and historical service to
-choose a UE for each resource block. Its simplified metric is:
-
-```text
-PF metric = bytesPerResourceBlock(CQI)
-            / max(historical average throughput, epsilon)
-```
-
-CQI appears in the numerator, so a UE with a better current channel receives a higher
-estimated rate. Historical average throughput appears in the denominator, so a UE that
-has received less service can be preferred over a previously well-served UE. Epsilon is
-positive and prevents division by zero when a UE has no throughput history.
-
-Only UEs with useful queued demand are eligible. When scores are equal, the scheduler
-prefers the UE with fewer resource blocks in the current call, then the lower UE ID. The
-result is deterministic and prevents one equal-scoring UE from taking every resource
-block.
-
-The scheduler only reads historical throughput. `SimulationEngine` updates it after
-transmission using this exponential moving average:
-
-```text
-T(t) = 0.9 * T(t-1) + 0.1 * transmittedBytes(t)
-```
-
-This PF model is an educational approximation, not an exact production or 3GPP
-scheduler.
-
-## Simulation Loop
-
-For each time slot, `SimulationEngine` performs the following operations in order:
-
-1. Generate packets for each UE and add them to its queue.
-2. Remove packets that have reached their latency deadline.
-3. Update each UE's CQI from its channel model.
-4. Build read-only scheduling views and ask the selected scheduler for allocations.
-5. Validate allocations before applying any of them.
-6. Transmit `allocated resource blocks * bytesPerResourceBlock(current CQI)` bytes.
-7. Update every UE's historical average throughput.
-8. Record per-UE and per-slot metrics.
-
-The simulation seed and UE ID are combined into separate deterministic traffic and
-channel seeds. Repeating a run with the same configuration and scheduler produces the
-same metrics and output files.
-
-## Metrics And Results
-
-Per-UE metrics include generated packets and bytes, completed packets, transmitted
-bytes, dropped packets and remaining bytes, allocated resource blocks, average bytes
-transmitted per slot, average completed-packet latency, and nearest-rank 95th-percentile
-completed-packet latency. Latencies are zero when no packets complete.
-
-Overall metrics include generated, transmitted, and dropped bytes; allocated and
-available resource blocks; resource-block utilization; and Jain's fairness index based
-on per-UE average throughput. Utilization is allocated blocks divided by available
-blocks. Jain's index is zero when every UE has zero throughput.
-
-Each run creates these deterministic files in the selected output directory:
-
-- `summary.json`: overall metrics and the complete per-UE metrics array.
-- `per_ue.csv`: one row of accumulated and derived metrics per UE.
-- `per_slot.csv`: generated, transmitted, and dropped bytes plus allocated blocks per
-  slot.
-
-## Planned Architecture
-
-- `Packet`
-- `UserEquipment`
-- `TrafficGenerator`
-- `ChannelModel`
-- `IScheduler`
-- `RoundRobinScheduler`
-- `ProportionalFairScheduler`
-- `SimulationEngine`
-- `ConfigLoader`
-- `ResultWriter`
-
-Schedulers return allocation decisions. The simulation engine validates and applies
-those decisions to UE queues before collecting metrics and writing results.
+This completed educational prototype models a simplified radio scheduler in modern
+C++20. It connects configurable traffic and channel models to Round Robin and
+Proportional Fair scheduling, then exports deterministic metrics for automated testing
+and visualization.
+
+> This is a simplified learning project, not a standards-compliant 3GPP implementation.
+
+## Key Features
+
+- JSON-configured simulations with deterministic random seeds.
+- FIFO packet queues, partial transmission, latency deadlines, and packet drops.
+- Periodic, Bernoulli, and disabled traffic generators.
+- Static, trace-based, and bounded random-walk CQI models.
+- Interchangeable Round Robin and Proportional Fair schedulers through `IScheduler`.
+- Per-slot and per-UE throughput, latency, drop, utilization, and fairness metrics.
+- Deterministic JSON and CSV result files.
+- GoogleTest unit tests and Java 21/JUnit black-box integration tests.
+- GitHub Actions CI and a Matplotlib scheduler-comparison tool.
+
+## What The Simulator Demonstrates
+
+The project demonstrates how traffic demand, channel quality, packet deadlines, and a
+scheduler's policy interact under a limited resource-block budget. Round Robin rotates
+service among active UEs without considering channel quality, while Proportional Fair
+balances current CQI opportunity against historical throughput.
+
+The deterministic model makes those policy differences reproducible and testable. It is
+designed to explain software structure and scheduling tradeoffs, not to predict real
+network performance.
+
+## Architecture
+
+The implementation keeps configuration, models, scheduling decisions, simulation
+coordination, metrics, and result writing separate:
 
 ```mermaid
 flowchart LR
@@ -253,21 +46,272 @@ flowchart LR
     IScheduler --> RoundRobinScheduler
     IScheduler --> ProportionalFairScheduler
     SimulationEngine --> ResultWriter
+    ResultWriter --> JSON
+    ResultWriter --> CSV
 ```
 
-## Roadmap
+`Packet` and `UserEquipment` own queue state. Schedulers receive read-only
+`UeSchedulingView` values and return allocation decisions; `SimulationEngine`
+validates and applies those decisions.
 
-1. Complete: repository structure and CMake build.
-2. Complete: core packet and UE queue models with JSON configuration.
-3. Complete: traffic generation and changing channel models.
-4. Complete: Round-Robin scheduler.
-5. Complete: simplified Proportional-Fair scheduler.
-6. Complete: simulation engine, metrics collection, and result export.
-7. Complete: Java/JUnit black-box integration tests.
-8. Complete: GitHub Actions CI.
+## Simulation Flow
 
-## Development Note
+For every time slot, the engine performs these operations in order:
 
-AI-assisted engineering is being used for development and review. Features are added
-incrementally and reviewed phase by phase, so the simulator is intentionally incomplete
-at this stage.
+1. Generate packets for each UE and add them to its queue.
+2. Remove packets that have reached their latency deadline.
+3. Update each UE's CQI from its channel model.
+4. Build scheduling views and request resource allocations.
+5. Validate every allocation before applying any of them.
+6. Transmit bytes using the allocated resource blocks and current CQI.
+7. Update each UE's historical average throughput.
+8. Record per-UE and per-slot metrics.
+
+Transmission capacity uses:
+
+```text
+bytes per resource block = CQI * 100
+byte capacity = allocated resource blocks * bytes per resource block
+```
+
+A packet expires when:
+
+```text
+current slot >= arrival slot + latency budget slots
+```
+
+Completed-packet latency includes both endpoint slots:
+
+```text
+latency = completion slot - arrival slot + 1
+```
+
+## Schedulers
+
+### Round Robin
+
+`RoundRobinScheduler` allocates one useful resource block at a time in stable UE order.
+Its cursor continues across slots, skips empty queues, and prevents a low-capacity slot
+from always starting with the first UE. It does not use CQI or throughput history when
+choosing which active UE is next.
+
+### Proportional Fair
+
+`ProportionalFairScheduler` scores eligible UEs with:
+
+```text
+PF metric = bytesPerResourceBlock(CQI)
+            / max(historical average throughput, epsilon)
+```
+
+Higher CQI raises the current opportunity, while previously received throughput lowers
+priority. The engine, not the scheduler, updates the history after each slot:
+
+```text
+T(t) = 0.9 * T(t-1) + 0.1 * transmittedBytes(t)
+```
+
+Equal scores prefer the UE with fewer allocations in the current call, then the lower
+UE ID, which keeps results deterministic.
+
+## Quick Start
+
+Prerequisites:
+
+- CMake 3.24 or newer
+- A C++20 compiler
+- Python 3 for scheduler comparison
+- Java 21 and Maven 3 for integration tests
+
+Build and run:
+
+```bash
+cmake -S . -B build
+cmake --build build --parallel
+
+./build/ran_scheduler \
+  --config configs/basic.json \
+  --scheduler round-robin \
+  --output-dir results/basic
+```
+
+`--config` is required. The scheduler defaults to `round-robin`, and the output
+directory defaults to `results`. Run `./build/ran_scheduler --help` for the complete
+CLI summary.
+
+## Configuration Example
+
+Configurations define global simulation settings and a list of UEs. This shortened
+example uses periodic traffic and a bounded random-walk channel:
+
+```json
+{
+  "simulation": {
+    "time_slots": 200,
+    "slot_duration_ms": 1.0,
+    "resource_blocks_per_slot": 3,
+    "random_seed": 2026
+  },
+  "ues": [
+    {
+      "id": 1,
+      "priority": 1,
+      "initial_cqi": 12,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 2400,
+        "latency_budget_slots": 5,
+        "period_slots": 1,
+        "category": "voice"
+      },
+      "channel": {
+        "model": "random_walk",
+        "min_cqi": 6,
+        "max_cqi": 15
+      }
+    }
+  ]
+}
+```
+
+See `configs/` for complete examples. Traffic categories and values are synthetic
+educational inputs, not standardized QoS profiles.
+
+## Comparing Schedulers
+
+Install the visualization dependency and run both schedulers against the congested
+scenario:
+
+```bash
+python3 -m pip install -r scripts/requirements.txt
+
+python3 scripts/compare_schedulers.py \
+  --executable ./build/ran_scheduler \
+  --config configs/congested.json \
+  --output-dir results/comparison
+```
+
+The script prints a concise table and creates:
+
+```text
+results/comparison/
+├── round-robin/
+│   ├── summary.json
+│   ├── per_ue.csv
+│   └── per_slot.csv
+├── proportional-fair/
+│   ├── summary.json
+│   ├── per_ue.csv
+│   └── per_slot.csv
+├── comparison.csv
+└── scheduler_comparison.png
+```
+
+## Actual Congested-Scenario Results
+
+`configs/congested.json` runs 200 slots with four periodic UEs, distinct initial CQIs
+and channel ranges, and only three resource blocks per slot. Offered demand exceeds
+available capacity. The following values were generated by the comparison script;
+ratios and latency are rounded for display.
+
+| Scheduler | Transmitted bytes | Dropped bytes | Completed packets | Avg completed latency | Jain fairness | RB utilization |
+|---|---:|---:|---:|---:|---:|---:|
+| Round Robin | 479,600 | 724,900 | 65 | 14.000 slots | 0.8736 | 1.0000 |
+| Proportional Fair | 504,300 | 701,700 | 241 | 10.701 slots | 0.8701 | 1.0000 |
+
+![Round Robin and Proportional Fair comparison](docs/scheduler_comparison.png)
+
+In this specific run, Proportional Fair transmitted 24,700 more bytes and dropped
+23,200 fewer bytes. Its completion-weighted latency was lower and it completed more
+packets, while Round Robin's Jain fairness index was slightly higher. Both schedulers
+used every available resource block.
+
+PF could favor useful channel opportunities as deterministic CQI values changed, while
+its historical-throughput denominator still reduced priority for recently served UEs.
+Round Robin continued rotating without considering CQI. These results describe only
+this synthetic scenario; they do not show that either scheduler is universally better.
+Exact values, including per-UE throughput, are in
+[`docs/comparison.csv`](docs/comparison.csv).
+
+## Result Files And Metrics
+
+Each simulator run writes:
+
+- `summary.json`: overall metrics and a per-UE metrics array.
+- `per_ue.csv`: one accumulated and derived metrics row per UE.
+- `per_slot.csv`: generated, transmitted, and dropped bytes plus allocated RBs per slot.
+
+Per-UE metrics include generated/completed/dropped packet counts, byte totals,
+allocated resource blocks, average throughput in bytes per slot, average completed
+latency, and nearest-rank 95th-percentile latency.
+
+Overall metrics include transmitted and dropped bytes, allocated and available resource
+blocks, resource-block utilization, and Jain's fairness index based on per-UE average
+throughput. Latency values are zero when no packets complete, and fairness is zero when
+all UEs have zero throughput.
+
+## Testing And CI
+
+C++ unit tests exercise individual models, schedulers, validation rules, metrics, the
+simulation engine, and result writing:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Java integration tests launch the complete executable as an external process and verify
+help text, both schedulers, generated files, deterministic output, and CLI errors:
+
+```bash
+mvn -B -f integration-tests/pom.xml test \
+  -Dran.executable="$(pwd)/build/ran_scheduler" \
+  -Dran.repository.root="$(pwd)"
+```
+
+The [CI workflow](.github/workflows/ci.yml) performs the C++ build, C++ tests, and Java
+integration tests on pushes to `main` and pull requests targeting `main`.
+
+## Project Structure
+
+```text
+.github/workflows/   GitHub Actions CI
+cmake/               Compiler warnings and sanitizer options
+configs/             Reproducible simulation scenarios
+docs/                Committed comparison artifacts
+include/ran/         Public C++ interfaces
+integration-tests/   Java 21/JUnit black-box tests
+scripts/             Python comparison and visualization
+src/                 C++ implementation and CLI
+tests/               GoogleTest unit tests
+```
+
+## Engineering Highlights
+
+- C++20 component-based simulator with value-owning packet and UE state.
+- Interchangeable schedulers behind the small `IScheduler` interface.
+- Deterministic traffic and channel simulation from configuration seeds.
+- FIFO queues with partial transmission and latency-deadline drops.
+- Throughput, latency, resource utilization, and Jain fairness metrics.
+- GoogleTest coverage for components and simulation behavior.
+- Java 21/JUnit end-to-end process testing.
+- GitHub Actions build and test automation.
+- JSON/CSV outputs and headless Python/Matplotlib visualization.
+
+## Limitations
+
+- This is a simplified educational simulator and is not 3GPP-compliant.
+- The `CQI * 100` byte-capacity rule is not a transport-block calculation or physical
+  layer model.
+- Traffic categories, arrivals, packet sizes, CQI traces, and random walks are synthetic.
+- The schedulers omit many concerns present in deployed RAN systems.
+- Results should not be treated as network-performance benchmarks.
+- No proprietary Ericsson source code, data, algorithms, documentation, interfaces, or
+  implementation details are used.
+
+## Possible Future Improvements
+
+- Add more configurable channel traces and traffic scenarios.
+- Model retransmissions and richer packet-priority policies.
+- Add another educational scheduling strategy for comparison.
+- Export time-series plots for queue depth and per-slot throughput.
+- Replace the linear CQI capacity rule with a documented research model.
