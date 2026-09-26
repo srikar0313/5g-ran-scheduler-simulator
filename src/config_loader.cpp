@@ -130,7 +130,8 @@ TrafficCategory parseTrafficCategory(const std::string& category, const std::str
 }
 
 SimulationSettings parseSimulationSettings(const Json& root) {
-  const auto& simulation = requireObject(root, "simulation", "");
+  const std::string emptyPath;
+  const auto& simulation = requireObject(root, "simulation", emptyPath);
   const std::string path = "simulation";
 
   const auto timeSlots = readUint32(simulation, "time_slots", path);
@@ -217,8 +218,9 @@ SimulationConfig parseConfig(const Json& root) {
     configurationError("root", "must be an object");
   }
 
+  const std::string emptyPath;
   SimulationConfig config{parseSimulationSettings(root), {}};
-  const auto& ues = requireField(root, "ues", "");
+  const auto& ues = requireField(root, "ues", emptyPath);
   if (!ues.is_array()) {
     configurationError("ues", "must be an array");
   }
