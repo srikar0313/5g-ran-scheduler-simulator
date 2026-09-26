@@ -1,0 +1,27 @@
+{
+  "simulation": {
+    "time_slots": 100,
+    "slot_duration_ms": 1.0,
+    "resource_blocks_per_slot": 10,
+    "random_seed": 2026
+  },
+  "ues": [
+    {
+      "id": 1,
+      "priority": 1,
+      "initial_cqi": 10,
+      "traffic": {
+        "model": "bernoulli",
+        "packet_size_bytes": 800,
+        "latency_budget_slots": 12,
+        "arrival_probability": 0.35,
+        "category": "video"
+      },
+      "channel": {
+        "model": "random_walk",
+        "min_cqi": 4,
+        "max_cqi": 14
+      }
+    }
+  ]
+}

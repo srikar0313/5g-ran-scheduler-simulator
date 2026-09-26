@@ -68,10 +68,7 @@ std::uint32_t readUint32(const Json& object, std::string_view name,
   return static_cast<std::uint32_t>(value);
 }
 
-int readInt(const Json& object, std::string_view name, const std::string& objectPath) {
-  const auto& value = requireField(object, name, objectPath);
-  const auto path = childPath(objectPath, name);
-
+int readIntegerValue(const Json& value, const std::string& path) {
   if (value.is_number_unsigned()) {
     const auto number = value.get<std::uint64_t>();
     if (number > static_cast<std::uint64_t>(std::numeric_limits<int>::max())) {
@@ -90,6 +87,11 @@ int readInt(const Json& object, std::string_view name, const std::string& object
   }
 
   configurationError(path, "must be an integer");
+}
+
+int readInt(const Json& object, std::string_view name, const std::string& objectPath) {
+  const auto& value = requireField(object, name, objectPath);
+  return readIntegerValue(value, childPath(objectPath, name));
 }
 
 double readNumber(const Json& object, std::string_view name, const std::string& objectPath) {
@@ -158,8 +160,9 @@ TrafficConfig parseTraffic(const Json& ue, const std::string& uePath) {
   const auto path = childPath(uePath, "traffic");
 
   const auto model = readString(traffic, "model", path);
-  if (model != "periodic") {
-    configurationError(childPath(path, "model"), "must be \"periodic\"");
+  if (model != "periodic" && model != "bernoulli" && model != "none") {
+    configurationError(childPath(path, "model"),
+                       "must be one of: periodic, bernoulli, none");
   }
 
   const auto packetSize = readUnsigned(traffic, "packet_size_bytes", path);
@@ -172,25 +175,75 @@ TrafficConfig parseTraffic(const Json& ue, const std::string& uePath) {
     configurationError(childPath(path, "latency_budget_slots"), "must be greater than zero");
   }
 
-  const auto period = readUint32(traffic, "period_slots", path);
-  if (period == 0) {
-    configurationError(childPath(path, "period_slots"), "must be greater than zero");
-  }
-
   const auto categoryName = readString(traffic, "category", path);
   const auto category = parseTrafficCategory(categoryName, childPath(path, "category"));
 
-  return TrafficConfig{model, packetSize, latencyBudget, period, category};
+  std::uint32_t period = 0;
+  double arrivalProbability = 0.0;
+  if (model == "periodic") {
+    period = readUint32(traffic, "period_slots", path);
+    if (period == 0) {
+      configurationError(childPath(path, "period_slots"), "must be greater than zero");
+    }
+  } else if (model == "bernoulli") {
+    arrivalProbability = readNumber(traffic, "arrival_probability", path);
+    if (arrivalProbability < 0.0 || arrivalProbability > 1.0) {
+      configurationError(childPath(path, "arrival_probability"),
+                         "must be between 0 and 1");
+    }
+  }
+
+  return TrafficConfig{model, packetSize, latencyBudget, period, arrivalProbability, category};
 }
 
-ChannelConfig parseChannel(const Json& ue, const std::string& uePath) {
+ChannelConfig parseChannel(const Json& ue, const std::string& uePath, int initialCqi) {
   const auto& channel = requireObject(ue, "channel", uePath);
   const auto path = childPath(uePath, "channel");
   const auto model = readString(channel, "model", path);
-  if (model != "static") {
-    configurationError(childPath(path, "model"), "must be \"static\"");
+  if (model != "static" && model != "trace" && model != "random_walk") {
+    configurationError(childPath(path, "model"),
+                       "must be one of: static, trace, random_walk");
   }
-  return ChannelConfig{model};
+
+  ChannelConfig config{model, {}, 1, 15};
+  if (model == "trace") {
+    const auto& trace = requireField(channel, "cqi_trace", path);
+    const auto tracePath = childPath(path, "cqi_trace");
+    if (!trace.is_array()) {
+      configurationError(tracePath, "must be an array");
+    }
+    if (trace.empty()) {
+      configurationError(tracePath, "must not be empty");
+    }
+
+    config.cqiTrace.reserve(trace.size());
+    for (std::size_t index = 0; index < trace.size(); ++index) {
+      const auto valuePath = tracePath + "[" + std::to_string(index) + "]";
+      const auto cqi = readIntegerValue(trace.at(index), valuePath);
+      if (cqi < 1 || cqi > 15) {
+        configurationError(valuePath, "must be between 1 and 15");
+      }
+      config.cqiTrace.push_back(cqi);
+    }
+  } else if (model == "random_walk") {
+    config.minCqi = readInt(channel, "min_cqi", path);
+    config.maxCqi = readInt(channel, "max_cqi", path);
+    if (config.minCqi < 1 || config.minCqi > 15) {
+      configurationError(childPath(path, "min_cqi"), "must be between 1 and 15");
+    }
+    if (config.maxCqi < 1 || config.maxCqi > 15) {
+      configurationError(childPath(path, "max_cqi"), "must be between 1 and 15");
+    }
+    if (config.minCqi > config.maxCqi) {
+      configurationError(childPath(path, "min_cqi"), "must not exceed max_cqi");
+    }
+    if (initialCqi < config.minCqi || initialCqi > config.maxCqi) {
+      configurationError(childPath(uePath, "initial_cqi"),
+                         "must be inside the random-walk CQI range");
+    }
+  }
+
+  return config;
 }
 
 UeConfig parseUe(const Json& value, std::size_t index) {
@@ -210,7 +263,7 @@ UeConfig parseUe(const Json& value, std::size_t index) {
   }
 
   return UeConfig{readInt(value, "id", path), priority, initialCqi, parseTraffic(value, path),
-                  parseChannel(value, path)};
+                  parseChannel(value, path, initialCqi)};
 }
 
 SimulationConfig parseConfig(const Json& root) {

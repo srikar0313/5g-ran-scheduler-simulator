@@ -1,0 +1,24 @@
+{
+  "simulation": {
+    "time_slots": 20,
+    "slot_duration_ms": 1.0,
+    "resource_blocks_per_slot": 10,
+    "random_seed": 42
+  },
+  "ues": [
+    {
+      "id": 1,
+      "priority": 1,
+      "initial_cqi": 8,
+      "traffic": {
+        "model": "none",
+        "packet_size_bytes": 1,
+        "latency_budget_slots": 1,
+        "category": "download"
+      },
+      "channel": {
+        "model": "static"
+      }
+    }
+  ]
+}

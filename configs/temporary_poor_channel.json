@@ -1,0 +1,26 @@
+{
+  "simulation": {
+    "time_slots": 12,
+    "slot_duration_ms": 1.0,
+    "resource_blocks_per_slot": 10,
+    "random_seed": 42
+  },
+  "ues": [
+    {
+      "id": 1,
+      "priority": 1,
+      "initial_cqi": 11,
+      "traffic": {
+        "model": "periodic",
+        "packet_size_bytes": 600,
+        "latency_budget_slots": 8,
+        "period_slots": 2,
+        "category": "voice"
+      },
+      "channel": {
+        "model": "trace",
+        "cqi_trace": [11, 11, 10, 4, 3, 3, 4, 9, 11, 11]
+      }
+    }
+  ]
+}

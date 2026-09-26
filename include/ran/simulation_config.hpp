@@ -19,12 +19,16 @@ struct TrafficConfig {
   std::string model;
   std::uint64_t packetSizeBytes;
   std::uint32_t latencyBudgetSlots;
-  std::uint32_t periodSlots;
+  std::uint32_t periodSlots{0};
+  double arrivalProbability{0.0};
   TrafficCategory category;
 };
 
 struct ChannelConfig {
   std::string model;
+  std::vector<int> cqiTrace;
+  int minCqi{1};
+  int maxCqi{15};
 };
 
 struct UeConfig {

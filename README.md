@@ -12,12 +12,12 @@ used in this project.
 
 ## Current Phase
 
-Phase 3 is complete. The project now includes value-owning packet and UE queue models,
-plus JSON configuration loading and validation. The CLI can validate a configuration
-and print a short summary.
+Phase 4 is complete. The project now includes value-owning packet and UE queue models,
+traffic generation, channel models, and JSON configuration loading and validation. The
+CLI validates a configuration and prints a short summary; it does not run the models.
 
-Scheduling, traffic generation, changing channel conditions, simulation execution,
-metrics, result files, Java integration tests, and CI are not implemented yet.
+Scheduling, resource allocation, simulation execution, metrics, result files, Java
+integration tests, and CI are not implemented yet.
 
 ## Build And Test
 
@@ -27,6 +27,9 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/ran_scheduler --help
 ./build/ran_scheduler --config configs/basic.json
+./build/ran_scheduler --config configs/seeded_models.json
+./build/ran_scheduler --config configs/temporary_poor_channel.json
+./build/ran_scheduler --config configs/no_traffic.json
 ```
 
 Optional sanitizer build on compatible GCC/Clang environments:
@@ -43,6 +46,25 @@ ctest --test-dir build-sanitized --output-on-failure
 and simplified traffic category. `UserEquipment` owns a FIFO packet queue and basic
 transmitted and dropped counters.
 
+`TrafficGenerator` supports three simple models:
+
+- `periodic` creates one packet when `slot % period_slots == 0`.
+- `bernoulli` makes one seeded arrival decision per slot using a configured probability.
+- `none` never creates packets or consumes random values.
+
+For simplicity, `none` configurations still require the common packet size, latency
+budget, and category fields, although the model does not use them.
+
+`ChannelModel` supports three CQI models:
+
+- `static` always returns the initial CQI.
+- `trace` returns configured CQI values and holds the final value after the trace ends.
+- `random_walk` changes CQI by -1, 0, or +1 and clamps it to configured limits.
+
+Bernoulli traffic and random-walk CQI use `std::mt19937`. A fixed seed produces the same
+sequence, which keeps tests and examples reproducible. The Bernoulli threshold and the
+random-walk modulo operation are deliberately simple simulation abstractions.
+
 A packet uses this exact expiry rule:
 
 ```text
@@ -55,6 +77,9 @@ slots 0, 1, and 2, and expires before scheduling in slot 3.
 The `voice`, `video`, and `download` categories and the values in `configs/basic.json`
 are simplified educational labels and settings. They are not standardized 5G traffic
 profiles or QoS flows.
+
+All traffic and channel models are educational. They do not reproduce physical fading,
+standardized radio-channel behavior, or real network traffic distributions.
 
 ## Planned Architecture
 
@@ -89,7 +114,7 @@ flowchart LR
 
 1. Complete: repository structure and CMake build.
 2. Complete: core packet and UE queue models with JSON configuration.
-3. Planned: traffic generation and changing channel models.
+3. Complete: traffic generation and changing channel models.
 4. Planned: Round-Robin scheduler.
 5. Planned: simplified Proportional-Fair scheduler.
 6. Planned: metrics collection and result export.

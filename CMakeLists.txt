@@ -24,9 +24,11 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 add_library(
   ran_core STATIC
+  src/channel_model.cpp
   src/config_loader.cpp
   src/packet.cpp
   src/project_info.cpp
+  src/traffic_generator.cpp
   src/user_equipment.cpp)
 add_library(ran::core ALIAS ran_core)
 target_include_directories(ran_core PUBLIC "${PROJECT_SOURCE_DIR}/include")
@@ -58,9 +60,11 @@ if(BUILD_TESTING)
 
   add_executable(
     ran_unit_tests
+    tests/channel_model_test.cpp
     tests/config_loader_test.cpp
     tests/packet_test.cpp
     tests/project_info_test.cpp
+    tests/traffic_generator_test.cpp
     tests/user_equipment_test.cpp)
   target_link_libraries(ran_unit_tests PRIVATE ran::core GTest::gtest_main
                                                nlohmann_json::nlohmann_json)
