@@ -12,13 +12,11 @@ used in this project.
 
 ## Current Phase
 
-Phase 6 is complete. The project now includes value-owning packet and UE queue models,
-traffic generation, channel models, JSON configuration, and both Round-Robin and
-simplified Proportional-Fair scheduling decisions. The CLI validates a configuration and
-prints a short summary; it does not run the models or schedulers.
+Phase 7 is complete. The project now runs deterministic end-to-end simulations with
+traffic generation, channel updates, Round-Robin or simplified Proportional-Fair
+scheduling, packet transmission, deadline drops, metrics, and JSON/CSV result files.
 
-Applying scheduler decisions, packet transmission through a simulation engine, metrics,
-result files, Java integration tests, and CI are not implemented yet.
+Java integration tests and CI are not implemented yet.
 
 ## Build And Test
 
@@ -27,11 +25,14 @@ cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/ran_scheduler --help
-./build/ran_scheduler --config configs/basic.json
-./build/ran_scheduler --config configs/seeded_models.json
-./build/ran_scheduler --config configs/temporary_poor_channel.json
-./build/ran_scheduler --config configs/no_traffic.json
+./build/ran_scheduler --config configs/basic.json \
+  --scheduler round-robin --output-dir results/round-robin
+./build/ran_scheduler --config configs/basic.json \
+  --scheduler proportional-fair --output-dir results/proportional-fair
 ```
+
+`--config` is required. The scheduler defaults to `round-robin`, and the output
+directory defaults to `results`.
 
 Optional sanitizer build on compatible GCC/Clang environments:
 
@@ -75,6 +76,14 @@ current_slot >= arrival_slot + latency_budget_slots
 For example, a packet arriving in slot 0 with a latency budget of 3 can be served in
 slots 0, 1, and 2, and expires before scheduling in slot 3.
 
+Completed-packet latency includes both its arrival and completion slots:
+
+```text
+latency in slots = completion slot - arrival slot + 1
+```
+
+A packet that arrives and completes in the same slot therefore has a latency of one.
+
 The `voice`, `video`, and `download` categories and the values in `configs/basic.json`
 are simplified educational labels and settings. They are not standardized 5G traffic
 profiles or QoS flows.
@@ -89,10 +98,10 @@ contract by considering UEs in stable input order and allocating one resource bl
 time. Its cursor remembers which UE should be considered first on the next call, so a
 slot with too few resource blocks does not always favor the first UE.
 
-The scheduler receives read-only `UeSchedulingView` values containing only UE ID,
-queued bytes, and CQI. It cannot modify packet queues. Instead, it returns positive
-`ResourceAllocation` decisions in input order. A future simulation engine will be
-responsible for validating and applying those decisions.
+The scheduler receives read-only `UeSchedulingView` values containing UE ID, queued
+bytes, CQI, and historical average throughput. It cannot modify packet queues. Instead,
+it returns positive `ResourceAllocation` decisions in input order. The simulation engine
+validates and applies those decisions.
 
 UEs with empty queues are skipped. For active UEs, useful demand is estimated with:
 
@@ -125,15 +134,51 @@ prefers the UE with fewer resource blocks in the current call, then the lower UE
 result is deterministic and prevents one equal-scoring UE from taking every resource
 block.
 
-The scheduler only reads historical throughput. A future `SimulationEngine` will update
-it after transmission using an exponential moving average such as:
+The scheduler only reads historical throughput. `SimulationEngine` updates it after
+transmission using this exponential moving average:
 
 ```text
-T(t) = (1 - alpha) * T(t-1) + alpha * transmittedBytes(t)
+T(t) = 0.9 * T(t-1) + 0.1 * transmittedBytes(t)
 ```
 
-That update and end-to-end simulation are not implemented yet. This PF model is an
-educational approximation, not an exact production or 3GPP scheduler.
+This PF model is an educational approximation, not an exact production or 3GPP
+scheduler.
+
+## Simulation Loop
+
+For each time slot, `SimulationEngine` performs the following operations in order:
+
+1. Generate packets for each UE and add them to its queue.
+2. Remove packets that have reached their latency deadline.
+3. Update each UE's CQI from its channel model.
+4. Build read-only scheduling views and ask the selected scheduler for allocations.
+5. Validate allocations before applying any of them.
+6. Transmit `allocated resource blocks * bytesPerResourceBlock(current CQI)` bytes.
+7. Update every UE's historical average throughput.
+8. Record per-UE and per-slot metrics.
+
+The simulation seed and UE ID are combined into separate deterministic traffic and
+channel seeds. Repeating a run with the same configuration and scheduler produces the
+same metrics and output files.
+
+## Metrics And Results
+
+Per-UE metrics include generated packets and bytes, completed packets, transmitted
+bytes, dropped packets and remaining bytes, allocated resource blocks, average bytes
+transmitted per slot, average completed-packet latency, and nearest-rank 95th-percentile
+completed-packet latency. Latencies are zero when no packets complete.
+
+Overall metrics include generated, transmitted, and dropped bytes; allocated and
+available resource blocks; resource-block utilization; and Jain's fairness index based
+on per-UE average throughput. Utilization is allocated blocks divided by available
+blocks. Jain's index is zero when every UE has zero throughput.
+
+Each run creates these deterministic files in the selected output directory:
+
+- `summary.json`: overall metrics and the complete per-UE metrics array.
+- `per_ue.csv`: one row of accumulated and derived metrics per UE.
+- `per_slot.csv`: generated, transmitted, and dropped bytes plus allocated blocks per
+  slot.
 
 ## Planned Architecture
 
@@ -145,12 +190,11 @@ educational approximation, not an exact production or 3GPP scheduler.
 - `RoundRobinScheduler`
 - `ProportionalFairScheduler`
 - `SimulationEngine`
-- `MetricsCollector`
 - `ConfigLoader`
 - `ResultWriter`
 
-Schedulers are planned to return allocation decisions. The simulation engine will
-validate and apply those decisions to UE queues.
+Schedulers return allocation decisions. The simulation engine validates and applies
+those decisions to UE queues before collecting metrics and writing results.
 
 ```mermaid
 flowchart LR
@@ -160,8 +204,7 @@ flowchart LR
     SimulationEngine --> IScheduler
     IScheduler --> RoundRobinScheduler
     IScheduler --> ProportionalFairScheduler
-    SimulationEngine --> MetricsCollector
-    MetricsCollector --> ResultWriter
+    SimulationEngine --> ResultWriter
 ```
 
 ## Roadmap
@@ -171,7 +214,7 @@ flowchart LR
 3. Complete: traffic generation and changing channel models.
 4. Complete: Round-Robin scheduler.
 5. Complete: simplified Proportional-Fair scheduler.
-6. Planned: metrics collection and result export.
+6. Complete: simulation engine, metrics collection, and result export.
 7. Planned: Java/JUnit black-box integration tests.
 8. Planned: GitHub Actions CI, formatting checks, and sanitizer builds.
 

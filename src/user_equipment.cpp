@@ -69,12 +69,15 @@ std::uint64_t UserEquipment::totalDroppedPackets() const noexcept {
 
 void UserEquipment::addPacket(Packet packet) { packets_.push_back(std::move(packet)); }
 
-std::uint64_t UserEquipment::transmit(std::uint64_t byteCapacity) {
-  std::uint64_t transmittedBytes = 0;
+TransmissionResult UserEquipment::transmit(std::uint64_t byteCapacity,
+                                           std::uint32_t currentSlot) {
+  TransmissionResult result;
 
   while (!packets_.empty()) {
     auto& packet = packets_.front();
     if (packet.isFullyTransmitted()) {
+      ++result.completedPackets;
+      result.completedPacketLatencies.push_back(currentSlot - packet.arrivalSlot() + 1);
       packets_.pop_front();
       continue;
     }
@@ -83,16 +86,18 @@ std::uint64_t UserEquipment::transmit(std::uint64_t byteCapacity) {
     }
 
     const auto packetBytes = packet.transmit(byteCapacity);
-    transmittedBytes += packetBytes;
+    result.bytes += packetBytes;
     byteCapacity -= packetBytes;
 
     if (packet.isFullyTransmitted()) {
+      ++result.completedPackets;
+      result.completedPacketLatencies.push_back(currentSlot - packet.arrivalSlot() + 1);
       packets_.pop_front();
     }
   }
 
-  totalTransmittedBytes_ += transmittedBytes;
-  return transmittedBytes;
+  totalTransmittedBytes_ += result.bytes;
+  return result;
 }
 
 DropResult UserEquipment::removeExpiredPackets(std::uint32_t currentSlot) {

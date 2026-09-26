@@ -5,12 +5,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <vector>
 
 namespace ran {
 
 struct DropResult {
   std::uint64_t packets{};
   std::uint64_t bytes{};
+};
+
+struct TransmissionResult {
+  std::uint64_t bytes{};
+  std::uint64_t completedPackets{};
+  std::vector<std::uint32_t> completedPacketLatencies;
 };
 
 class UserEquipment {
@@ -30,7 +37,7 @@ class UserEquipment {
   [[nodiscard]] std::uint64_t totalDroppedPackets() const noexcept;
 
   void addPacket(Packet packet);
-  std::uint64_t transmit(std::uint64_t byteCapacity);
+  TransmissionResult transmit(std::uint64_t byteCapacity, std::uint32_t currentSlot);
   DropResult removeExpiredPackets(std::uint32_t currentSlot);
   void updateCqi(int cqi);
   void updateHistoricalAverageThroughput(double throughput);

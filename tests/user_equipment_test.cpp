@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 
@@ -39,7 +40,11 @@ TEST(UserEquipmentTest, TransmitsPacketsInFifoOrder) {
   ue.addPacket(makePacket(1, 100));
   ue.addPacket(makePacket(2, 200));
 
-  EXPECT_EQ(ue.transmit(150), 150);
+  const auto result = ue.transmit(150, 0);
+
+  EXPECT_EQ(result.bytes, 150);
+  EXPECT_EQ(result.completedPackets, 1);
+  EXPECT_EQ(result.completedPacketLatencies, std::vector<std::uint32_t>({1}));
   EXPECT_EQ(ue.queuedPacketCount(), 1);
   EXPECT_EQ(ue.queuedBytes(), 150);
   EXPECT_EQ(ue.totalTransmittedBytes(), 150);
@@ -49,7 +54,7 @@ TEST(UserEquipmentTest, SupportsPartialPacketTransmission) {
   ran::UserEquipment ue{1, 1, 10};
   ue.addPacket(makePacket(1, 100));
 
-  EXPECT_EQ(ue.transmit(30), 30);
+  EXPECT_EQ(ue.transmit(30, 0).bytes, 30);
   EXPECT_EQ(ue.queuedPacketCount(), 1);
   EXPECT_EQ(ue.queuedBytes(), 70);
 }
@@ -57,7 +62,11 @@ TEST(UserEquipmentTest, SupportsPartialPacketTransmission) {
 TEST(UserEquipmentTest, TransmittingFromEmptyQueueDoesNothing) {
   ran::UserEquipment ue{1, 1, 10};
 
-  EXPECT_EQ(ue.transmit(500), 0);
+  const auto result = ue.transmit(500, 0);
+
+  EXPECT_EQ(result.bytes, 0);
+  EXPECT_EQ(result.completedPackets, 0);
+  EXPECT_TRUE(result.completedPacketLatencies.empty());
   EXPECT_EQ(ue.totalTransmittedBytes(), 0);
 }
 
@@ -67,8 +76,18 @@ TEST(UserEquipmentTest, RemovesAnAlreadyCompletedPacket) {
   ran::UserEquipment ue{1, 1, 10};
   ue.addPacket(packet);
 
-  EXPECT_EQ(ue.transmit(0), 0);
+  EXPECT_EQ(ue.transmit(0, 0).bytes, 0);
   EXPECT_TRUE(ue.queueEmpty());
+}
+
+TEST(UserEquipmentTest, ReportsCompletedPacketLatencyInSlots) {
+  ran::UserEquipment ue{1, 1, 10};
+  ue.addPacket(makePacket(1, 100, 3, 10));
+
+  const auto result = ue.transmit(100, 5);
+
+  EXPECT_EQ(result.completedPackets, 1);
+  EXPECT_EQ(result.completedPacketLatencies, std::vector<std::uint32_t>({3}));
 }
 
 TEST(UserEquipmentTest, RemovesExpiredPacketsAndReportsDrops) {
