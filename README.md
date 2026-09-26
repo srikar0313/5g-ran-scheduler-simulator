@@ -1,5 +1,7 @@
 # 5G RAN Scheduling and Test Automation Simulator
 
+[![CI](https://github.com/srikar0313/5g-ran-scheduler-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/srikar0313/5g-ran-scheduler-simulator/actions/workflows/ci.yml)
+
 This repository is an incremental portfolio project for practicing modern C++20,
 Linux-compatible builds, automated testing, and CI/CD around simplified RAN L2/MAC
 scheduling concepts.
@@ -12,18 +14,57 @@ used in this project.
 
 ## Current Phase
 
-Phase 7 is complete. The project now runs deterministic end-to-end simulations with
+Phase 8 is complete. The project now runs deterministic end-to-end simulations with
 traffic generation, channel updates, Round-Robin or simplified Proportional-Fair
-scheduling, packet transmission, deadline drops, metrics, and JSON/CSV result files.
+scheduling, packet transmission, deadline drops, metrics, and JSON/CSV result files. A
+Java/JUnit suite tests the executable as an external process, and GitHub Actions runs
+both C++ and Java tests.
 
-Java integration tests and CI are not implemented yet.
+## Prerequisites
 
-## Build And Test
+- CMake 3.24 or newer
+- A C++20 compiler
+- Java 21
+- Maven 3
+
+## Build
 
 ```bash
 cmake -S . -B build
-cmake --build build
+cmake --build build --parallel
+```
+
+## C++ Unit Tests
+
+The GoogleTest suite exercises individual C++ components, including packet queues,
+traffic and channel models, schedulers, metrics, simulation behavior, and result writing.
+
+```bash
 ctest --test-dir build --output-on-failure
+```
+
+## Java Integration Tests
+
+The Java 21/JUnit 5 suite launches the compiled C++ executable with `ProcessBuilder`.
+It checks help output, both scheduler modes, result files and summary values,
+deterministic byte-for-byte output, and representative command-line errors.
+
+From the repository root, run:
+
+```bash
+mvn -B -f integration-tests/pom.xml test \
+  -Dran.executable="$(pwd)/build/ran_scheduler" \
+  -Dran.repository.root="$(pwd)"
+```
+
+The `ran.executable` property identifies the binary to launch. The
+`ran.repository.root` property lets the tests locate `configs/basic.json`; neither path
+is hard-coded in the test source. JUnit creates and removes temporary result directories
+for every test.
+
+## Run The Simulator
+
+```bash
 ./build/ran_scheduler --help
 ./build/ran_scheduler --config configs/basic.json \
   --scheduler round-robin --output-dir results/round-robin
@@ -33,6 +74,13 @@ ctest --test-dir build --output-on-failure
 
 `--config` is required. The scheduler defaults to `round-robin`, and the output
 directory defaults to `results`.
+
+## Continuous Integration
+
+The [CI workflow](.github/workflows/ci.yml) runs on pushes to `main` and pull requests
+targeting `main`. Its Ubuntu job configures and builds the C++ project, runs all C++ unit
+tests, sets up Java 21 with Maven caching, and runs the Java integration tests. CTest
+logs are uploaded when the job fails.
 
 Optional sanitizer build on compatible GCC/Clang environments:
 
@@ -215,8 +263,8 @@ flowchart LR
 4. Complete: Round-Robin scheduler.
 5. Complete: simplified Proportional-Fair scheduler.
 6. Complete: simulation engine, metrics collection, and result export.
-7. Planned: Java/JUnit black-box integration tests.
-8. Planned: GitHub Actions CI, formatting checks, and sanitizer builds.
+7. Complete: Java/JUnit black-box integration tests.
+8. Complete: GitHub Actions CI.
 
 ## Development Note
 

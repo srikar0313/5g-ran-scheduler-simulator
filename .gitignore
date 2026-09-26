@@ -25,7 +25,8 @@ ran_unit_tests
 *.swo
 .DS_Store
 
-# Java/Gradle outputs planned for later phases
+# Java build outputs
+integration-tests/target/
 .gradle/
 java-integration-tests/build/
 **/build/
@@ -33,7 +34,4 @@ java-integration-tests/build/
 !settings.gradle
 
 # Generated simulator results
-results/*
-!results/.gitkeep
-!results/examples/
-!results/examples/**
+results/

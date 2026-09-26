@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: integration-tests/pom.xml
+
+      - name: Configure C++ project
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build C++ project
+        run: cmake --build build --parallel
+
+      - name: Run C++ unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Run Java integration tests
+        run: >-
+          mvn -B -f integration-tests/pom.xml test
+          -Dran.executable="$GITHUB_WORKSPACE/build/ran_scheduler"
+          -Dran.repository.root="$GITHUB_WORKSPACE"
+
+      - name: Upload CTest logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-logs
+          path: build/Testing/Temporary/
+          if-no-files-found: ignore
+          retention-days: 7
