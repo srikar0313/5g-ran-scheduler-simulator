@@ -1,0 +1,39 @@
+# CMake build directories
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+Testing/
+cmake_install.cmake
+compile_commands.json
+
+# Generated binaries and libraries
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+ran_scheduler
+ran_unit_tests
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Java/Gradle outputs planned for later phases
+.gradle/
+java-integration-tests/build/
+**/build/
+!build.gradle
+!settings.gradle
+
+# Generated simulator results
+results/*
+!results/.gitkeep
+!results/examples/
+!results/examples/**
